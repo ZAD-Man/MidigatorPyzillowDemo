@@ -1,9 +1,16 @@
-from pyzillow.pyzillow import ZillowWrapper, GetDeepSearchResults, GetUpdatedPropertyDetails, ZillowNoResults,\
-    ZillowError, ZillowFail
+import sys
+from pyzillow.pyzillow import ZillowWrapper, GetDeepSearchResults, ZillowError
 from pymongo.mongo_client import MongoClient
 
 
 def connect_to_mongo(mongo_connection_string=None):
+    """
+    Connects to mongo
+    :param mongo_connection_string: String with mongo credentials URI, e.g. mongodb://uname:pass@host:port
+                                    See https://docs.mongodb.com/v3.0/reference/connection-string/
+                                    If None, connects to localhost:27017
+    :return: Connected mongo client
+    """
     if mongo_connection_string is not None:
         client = MongoClient(mongo_connection_string)
     else:
@@ -12,6 +19,11 @@ def connect_to_mongo(mongo_connection_string=None):
 
 
 def get_zestimate_from_response(zestimate_response):
+    """
+    Takes the response from a GetZestimate call and returns the Zestimate amount
+    :param zestimate_response: Result of a Zillow API GetZestimate call
+    :return: Zestimate amount from the response (str)
+    """
     amount_location = 'response/zestimate/amount'
     amount = zestimate_response.findtext(amount_location)
     return amount
@@ -31,8 +43,14 @@ def pull_property_data(search_address, search_zip, zillow_key, mongo_connection_
     """
     mongo_client = connect_to_mongo(mongo_connection_string)
     zillow_wrapper = ZillowWrapper(zillow_key)
-    search_response = zillow_wrapper.get_deep_search_results(search_address, search_zip)
-    search_results = GetDeepSearchResults(search_response)
+    try:
+        search_response = zillow_wrapper.get_deep_search_results(search_address, search_zip)
+        search_results = GetDeepSearchResults(search_response)
+    except ZillowError as ze:
+        # Write a better error message
+        error_string = "Zillow error %s: %s\n" % (ze.message['code'], ze.message['text'])
+        sys.stderr.write(error_string)
+        raise
     result_data = vars(search_results)
 
     # We don't want the xml data in there
@@ -76,6 +94,12 @@ def get_zestimate(zillow_id, zillow_key):
     }
 
     zillow_wrapper = ZillowWrapper(zillow_key)
-    zestimate_response = zillow_wrapper.get_data(url, params)
+    try:
+        zestimate_response = zillow_wrapper.get_data(url, params)
+    except ZillowError as ze:
+        # Write a better error message
+        error_string = "Zillow error %s: %s\n" % (ze.message['code'], ze.message['text'])
+        sys.stderr.write(error_string)
+        raise
     zestimate = get_zestimate_from_response(zestimate_response)
     return zestimate
